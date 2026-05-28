@@ -1,0 +1,165 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  output       = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USER — MNP field agents and receptionists
+// ─────────────────────────────────────────────────────────────────────────────
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  /// admin | agent | receptionist
+  role         String   @default("agent")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  treesPlanted   Tree[]        @relation("PlantedBy")
+  photosUploaded Photo[]       @relation("UploadedBy")
+  refreshTokens  RefreshToken[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REFRESH TOKEN — for JWT rotation
+// ─────────────────────────────────────────────────────────────────────────────
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOURIST — tree sponsor (the visiting tourist)
+// ─────────────────────────────────────────────────────────────────────────────
+model Tourist {
+  id          String   @id @default(uuid())
+  name        String
+  email       String?
+  nationality String?
+  phone       String?
+  createdAt   DateTime @default(now())
+
+  trees Tree[] @relation("TouristTrees")
+
+  @@map("tourists")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PARCEL — restoration zone
+// ─────────────────────────────────────────────────────────────────────────────
+model Parcel {
+  id            String   @id @default(uuid())
+  /// Human-readable name, e.g. "North-East Zone — Block A"
+  name          String
+  /// Unique field code, e.g. "PARC-01"
+  code          String   @unique
+  /// Park or site, e.g. "Mantadia National Park"
+  park          String?
+  /// Area in hectares
+  areaHa        Float?
+  /// WGS84 latitude
+  latitude      Float?
+  /// WGS84 longitude
+  longitude     Float?
+  notes         String?
+  /// Uploaded shapefile name (external storage)
+  shapefileName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  trees Tree[] @relation("ParcelTrees")
+
+  @@map("parcels")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TREE — the main entity
+// ─────────────────────────────────────────────────────────────────────────────
+model Tree {
+  id                String    @id @default(uuid())
+  /// QR code unique identifier, e.g. "QR-00001"
+  externalId        String    @unique
+  speciesScientific String?
+  speciesVernacular String?
+  planterName       String?
+  planterFunction   String?
+  plantationDate    DateTime?
+  area              String?
+  family            String?
+  heightCm          Int?
+  holeNumber        Int?
+  /// pending | planted | monitored | dead | replaced
+  healthStatus      String    @default("pending")
+  latitude          Float?
+  longitude         Float?
+  notes             String?
+
+  parcelId String?
+  parcel   Parcel? @relation("ParcelTrees", fields: [parcelId], references: [id], onDelete: SetNull)
+
+  touristId String?
+  tourist   Tourist? @relation("TouristTrees", fields: [touristId], references: [id], onDelete: SetNull)
+
+  plantedByUserId String?
+  plantedBy       User?   @relation("PlantedBy", fields: [plantedByUserId], references: [id], onDelete: SetNull)
+
+  photos    Photo[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("trees")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHOTO — tree photos (plantation, monthly monitoring, replanting)
+// ─────────────────────────────────────────────────────────────────────────────
+model Photo {
+  id        String   @id @default(uuid())
+  url       String
+  /// plantation | monthly | replanting
+  type      String   @default("monthly")
+  treeId    String?
+  tree      Tree?    @relation(fields: [treeId], references: [id], onDelete: Cascade)
+
+  uploadedByUserId String?
+  uploadedBy       User?   @relation("UploadedBy", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@map("photos")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SYNC LOG — audit trail of mobile synchronisations
+// ─────────────────────────────────────────────────────────────────────────────
+model SyncLog {
+  id          String   @id @default(uuid())
+  /// Device/agent identifier
+  deviceId    String
+  /// Number of records synced in this session
+  recordCount Int      @default(0)
+  /// CREATE | UPDATE | UPLOAD_PHOTO
+  actions     String?
+  /// success | partial | failed
+  status      String   @default("success")
+  syncedAt    DateTime @default(now())
+
+  @@map("sync_logs")
+}
