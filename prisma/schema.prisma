@@ -2,12 +2,11 @@
 
 generator client {
   provider = "prisma-client-js"
-  output       = "./generated"
+  output   = "./generated"
 }
 
 datasource db {
   provider = "postgresql"
-
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,9 +23,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  treesPlanted   Tree[]        @relation("PlantedBy")
-  photosUploaded Photo[]       @relation("UploadedBy")
+  treesPlanted   Tree[]         @relation("PlantedBy")
+  photosUploaded Photo[]        @relation("UploadedBy")
   refreshTokens  RefreshToken[]
+  deviceTokens   DeviceToken[]
 
   @@map("users")
 }
@@ -131,12 +131,12 @@ model Tree {
 // PHOTO — tree photos (plantation, monthly monitoring, replanting)
 // ─────────────────────────────────────────────────────────────────────────────
 model Photo {
-  id        String   @id @default(uuid())
-  url       String
+  id     String  @id @default(uuid())
+  url    String
   /// plantation | monthly | replanting
-  type      String   @default("monthly")
-  treeId    String?
-  tree      Tree?    @relation(fields: [treeId], references: [id], onDelete: Cascade)
+  type   String  @default("monthly")
+  treeId String?
+  tree   Tree?   @relation(fields: [treeId], references: [id], onDelete: Cascade)
 
   uploadedByUserId String?
   uploadedBy       User?   @relation("UploadedBy", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
@@ -163,3 +163,25 @@ model SyncLog {
 
   @@map("sync_logs")
 }
+
+// Ajouter dans prisma/schema.prisma
+
+model DeviceToken {
+  id         String    @id @default(uuid())
+  token      String    @unique
+  /// Android ID ou UUID généré à l'installation
+  deviceId   String
+  /// Nom lisible, ex: "Redmi Note 8 Pro — Safidy"
+  deviceName String?
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime?
+  expiresAt  DateTime // 1 an par défaut
+  createdAt  DateTime  @default(now())
+
+  @@map("device_tokens")
+}
+
+// Ajouter dans model User :
+// deviceTokens DeviceToken[]

@@ -1,17 +1,17 @@
 // src/auth/auth.service.ts
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { JwtService }    from '@nestjs/jwt';
-import * as bcrypt       from 'bcrypt';
-import { v4 as uuidv4 }  from 'uuid';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
+import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
-import { UsersService }  from '../users/users.service';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma:   PrismaService,
-    private readonly users:    UsersService,
-    private readonly jwt:      JwtService,
+    private readonly prisma: PrismaService,
+    private readonly users: UsersService,
+    private readonly jwt: JwtService,
   ) {}
 
   // ── Validate credentials (used by LocalStrategy) ─────────────────────────
@@ -26,21 +26,43 @@ export class AuthService {
     return safe;
   }
 
+  async registerDevice(
+    userId: string,
+    dto: { deviceId: string; deviceName?: string },
+  ) {
+    const token = uuidv4() + '-' + uuidv4(); // token long
+    const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 1 an
+
+    await (this.prisma as any).deviceToken.upsert({
+      where: { deviceId: dto.deviceId } as any,
+      update: { token, isActive: true, expiresAt },
+      create: {
+        token,
+        deviceId: dto.deviceId,
+        deviceName: dto.deviceName,
+        userId,
+        expiresAt,
+      },
+    });
+
+    return { deviceToken: token, expiresAt };
+  }
+
   // ── Login → return access + refresh tokens ────────────────────────────────
   async login(user: { id: string; email: string; role: string; name: string }) {
     const payload = { sub: user.id, email: user.email, role: user.role };
 
-    const accessToken  = this.jwt.sign(payload);
+    const accessToken = this.jwt.sign(payload);
     const refreshToken = await this._createRefreshToken(user.id);
 
     return {
       accessToken,
       refreshToken,
       user: {
-        id:    user.id,
-        name:  user.name,
+        id: user.id,
+        name: user.name,
         email: user.email,
-        role:  user.role,
+        role: user.role,
       },
     };
   }
@@ -48,7 +70,7 @@ export class AuthService {
   // ── Refresh access token ──────────────────────────────────────────────────
   async refreshToken(token: string) {
     const record = await this.prisma.refreshToken.findUnique({
-      where:   { token },
+      where: { token },
       include: { user: true },
     });
 
@@ -60,8 +82,8 @@ export class AuthService {
     await this.prisma.refreshToken.delete({ where: { token } });
 
     const { passwordHash, ...user } = record.user;
-    const payload      = { sub: user.id, email: user.email, role: user.role };
-    const accessToken  = this.jwt.sign(payload);
+    const payload = { sub: user.id, email: user.email, role: user.role };
+    const accessToken = this.jwt.sign(payload);
     const refreshToken = await this._createRefreshToken(user.id);
 
     return { accessToken, refreshToken };
@@ -69,14 +91,12 @@ export class AuthService {
 
   // ── Logout — invalidate refresh token ────────────────────────────────────
   async logout(token: string) {
-    await this.prisma.refreshToken
-      .delete({ where: { token } })
-      .catch(() => {}); // ignore if not found
+    await this.prisma.refreshToken.delete({ where: { token } }).catch(() => {}); // ignore if not found
   }
 
   // ── Private ───────────────────────────────────────────────────────────────
   private async _createRefreshToken(userId: string): Promise<string> {
-    const token     = uuidv4();
+    const token = uuidv4();
     const expiresAt = new Date(
       Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
     );
